@@ -17,6 +17,7 @@ EN ESTA FASE **SÍ** se hace:
 - Instalar dependencias base (Composer, JWT solo como librería)
 - Crear script de instalación y checklist
 - Exponer endpoint técnico `/api/v1/health`
+- Durante FASE 0, `/api/v1/health` es el único endpoint permitido.
 
 EN ESTA FASE **NO** se hace:
 - Endpoints de negocio
