@@ -19,9 +19,6 @@ done
 log "Checking Composer"
 command -v composer >/dev/null || fail "Composer not installed"
 
-log "Checking PostgreSQL client"
-command -v psql >/dev/null || fail "PostgreSQL client not installed"
-
 log "Installing PHP dependencies"
 composer install --no-interaction
 
@@ -35,6 +32,6 @@ fi
 
 log "Verifying database connectivity"
 php artisan migrate:status >/dev/null 2>&1 || \
-  log "No migrations present (expected in FASE 0)"
+  fail "Laravel cannot connect to PostgreSQL (check .env credentials)"
 
 log "FASE 0 environment validation completed successfully"
