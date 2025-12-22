@@ -15,12 +15,14 @@ class AuthController extends Controller
 
     public function login(Request $request): JsonResponse
     {
-        $request->validate([
-            'email' => ['required', 'email'],
-            'password' => ['required', 'string'],
-        ]);
-
         $payload = $this->authService->login($request);
+
+        return response()->json($payload, 200);
+    }
+
+    public function refresh(Request $request): JsonResponse
+    {
+        $payload = $this->authService->refresh($request);
 
         return response()->json($payload, 200);
     }

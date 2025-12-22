@@ -2,19 +2,19 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Traits\UsesUuid;
 use Illuminate\Database\Eloquent\Model;
 
 class AuditLog extends Model
 {
-    use HasFactory;
+    use UsesUuid;
 
-    protected $table = 'audit_log';
+    protected $table = 'audit_logs';
 
-    public $timestamps = false;
+    public $timestamps = true;
 
     protected $fillable = [
-        'occurred_at',
+        'id',
         'actor_user_id',
         'company_id',
         'action',
@@ -25,5 +25,10 @@ class AuditLog extends Model
         'user_agent',
         'request_id',
         'metadata_json',
+    ];
+
+    protected $casts = [
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
     ];
 }

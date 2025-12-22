@@ -2,18 +2,17 @@
 
 namespace App\Services;
 
-use App\Models\CompanyMembership;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthService
 {
-    public function __construct(private readonly AuditLogService $auditLogService)
-    {
+    public function __construct(
+        private readonly AuditLogService $auditLogService,
+        private readonly MembershipService $membershipService
+    ) {
     }
 
     public function login(Request $request): array
@@ -21,166 +20,88 @@ class AuthService
         $email = trim((string) $request->input('email'));
         $password = (string) $request->input('password');
 
+        if ($email === '' || $password === '') {
+            throw new HttpException(422, 'VALIDATION_ERROR');
+        }
+
+        // 1) Intento login normal
         $user = User::query()
             ->where('email', $email)
             ->whereNull('deleted_at')
             ->first();
 
-        if (!$user) {
-            $invitedMembership = CompanyMembership::query()
-                ->where('invited_email', $email)
-                ->where('status', 'invited')
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!$invitedMembership) {
-                $this->auditLogService->record('auth.login_failed', null, null, 'user', null, 'security', [
-                    'email' => $email,
-                ]);
-                throw new HttpException(401, 'INVALID_CREDENTIALS');
-            }
-
-            $user = null;
-
-            DB::transaction(function () use (&$user, $email, $password, $invitedMembership): void {
-                $now = now();
-
-                $user = User::create([
-                    'id' => (string) Str::uuid(),
-                    'name' => $email,
-                    'email' => $email,
-                    'password' => Hash::make($password),
-                    'status' => 'active',
-                    'created_at' => $now,
-                    'created_by' => null,
-                ]);
-
-                $invitedMembership->update([
-                    'user_id' => $user->id,
-                    'status' => 'active',
-                    'accepted_at' => $now,
-                    'updated_at' => $now,
-                    'updated_by' => $user->id,
-                ]);
-
-                $this->auditLogService->record(
-                    'membership.activate',
-                    $user->id,
-                    $invitedMembership->company_id,
-                    'company_membership',
-                    $invitedMembership->id,
-                    'info',
-                    [
-                        'email' => $email,
-                    ]
-                );
-            });
-        } else {
+        if ($user) {
             if (!Hash::check($password, $user->password)) {
                 $this->auditLogService->record('auth.login_failed', $user->id, null, 'user', $user->id, 'security', [
                     'email' => $email,
-                ]);
+                ], $request);
+
                 throw new HttpException(401, 'INVALID_CREDENTIALS');
             }
 
-            if ($user->status === 'suspended') {
-                $invitedMembership = CompanyMembership::query()
-                    ->where('user_id', $user->id)
-                    ->where('status', 'invited')
-                    ->whereNull('deleted_at')
-                    ->first();
+            // Si existe invitación pendiente para este email, la acepta vía MembershipService (no acá)
+            $this->membershipService->acceptPendingInvitationsForEmail($user, $email);
 
-                if (!$invitedMembership) {
-                    $this->auditLogService->record('auth.login_failed', $user->id, null, 'user', $user->id, 'security', [
-                        'email' => $email,
-                    ]);
-                    throw new HttpException(403, 'USER_SUSPENDED');
-                }
-            }
+            $this->auditLogService->record('auth.login_success', $user->id, null, 'user', $user->id, 'info', [
+                'email' => $email,
+            ], $request);
 
-            DB::transaction(function () use ($user, $email): void {
-                $now = now();
+            // En FASE 1 vos definís si usás Sanctum o JWT.
+            // Ahora: Sanctum
+            $token = $user->createToken('api')->plainTextToken;
 
-                $invitedMemberships = CompanyMembership::query()
-                    ->where('user_id', $user->id)
-                    ->where('status', 'invited')
-                    ->whereNull('deleted_at')
-                    ->get();
-
-                foreach ($invitedMemberships as $membership) {
-                    $membership->update([
-                        'status' => 'active',
-                        'accepted_at' => $now,
-                        'updated_at' => $now,
-                        'updated_by' => $user->id,
-                    ]);
-
-                    $this->auditLogService->record(
-                        'membership.activate',
-                        $user->id,
-                        $membership->company_id,
-                        'company_membership',
-                        $membership->id,
-                        'info',
-                        [
-                            'email' => $email,
-                        ]
-                    );
-                }
-
-                if ($user->status !== 'active') {
-                    $user->update([
-                        'status' => 'active',
-                        'updated_at' => $now,
-                        'updated_by' => $user->id,
-                    ]);
-                }
-            });
+            return [
+                'token' => $token,
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                ],
+            ];
         }
 
-        $token = $user->createToken('auth')->plainTextToken;
-
-        $memberships = CompanyMembership::query()
-            ->where('user_id', $user->id)
-            ->whereNull('deleted_at')
-            ->get([
-                'id',
-                'company_id',
-                'role',
-                'status',
-                'invited_email',
-            ]);
-
-        $this->auditLogService->record('auth.login', $user->id, null, 'user', $user->id, 'info');
+        // 2) Si NO existe user, solo permitimos “crear” si hay invitación previa
+        $created = $this->membershipService->createUserFromInvitationAndAccept($email, $password, $request);
+        $token = $created->createToken('api')->plainTextToken;
 
         return [
             'token' => $token,
-            'user' => $user->only(['id', 'name', 'email', 'status']),
-            'memberships' => $memberships,
+            'user' => [
+                'id' => $created->id,
+                'name' => $created->name,
+                'email' => $created->email,
+            ],
         ];
     }
 
-    public function logout(User $user): void
+    public function refresh(Request $request): array
     {
-        $user->currentAccessToken()?->delete();
+        // Para Sanctum, refresh real no aplica como JWT.
+        // MVP: devolvemos 501 para no mentir.
+        throw new HttpException(501, 'NOT_IMPLEMENTED');
     }
 
-    public function me(User $user): array
+    public function logout(?User $user): void
     {
-        $memberships = CompanyMembership::query()
-            ->where('user_id', $user->id)
-            ->whereNull('deleted_at')
-            ->get([
-                'id',
-                'company_id',
-                'role',
-                'status',
-                'invited_email',
-            ]);
+        if (!$user) {
+            return;
+        }
+
+        $user->tokens()->delete();
+    }
+
+    public function me(?User $user): array
+    {
+        if (!$user) {
+            throw new HttpException(401, 'UNAUTHENTICATED');
+        }
 
         return [
-            'user' => $user->only(['id', 'name', 'email', 'status']),
-            'memberships' => $memberships,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+            ],
         ];
     }
 }
