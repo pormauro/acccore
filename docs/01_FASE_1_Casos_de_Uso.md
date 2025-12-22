@@ -7,24 +7,31 @@ Si un caso falla, **FASE 1 NO está aprobada**.
 
 ---
 
-## CU-01 – Registro y primer acceso
+## CU-01 – Primer acceso / creación de usuario
 
 ### Escenario
-Un usuario nuevo quiere usar el sistema por primera vez.
+Una persona accede al sistema por primera vez.
+
+### Reglas
+- **No existe un endpoint público de registro libre.**
+- Un usuario se crea:
+  - implícitamente al aceptar una invitación, o
+  - porque ya existe previamente en el sistema.
 
 ### Flujo
-1. Usuario se registra (email + password).
-   - El registro puede ser explícito (endpoint) o implícito al aceptar invitación.
-   - No se asume un endpoint de registro si el flujo es por invitación.
-2. Usuario inicia sesión.
-3. El sistema devuelve:
+1. El usuario inicia sesión con email y password.
+2. Si el usuario existe:
+   - se autentica normalmente.
+3. Si el usuario no existe pero hay una invitación pendiente para ese email:
+   - el sistema crea el usuario automáticamente.
+4. El sistema devuelve:
    - token válido
    - datos del usuario
-   - lista de memberships (vacía).
+   - lista de memberships (activas o invitadas).
 
 ### Resultado esperado
 - Usuario queda en estado `active`.
-- No pertenece aún a ninguna empresa.
+- El sistema **no permite registro libre sin invitación o control previo**.
 
 ---
 
@@ -35,86 +42,90 @@ Un usuario crea su primera empresa.
 
 ### Flujo
 1. Usuario autenticado envía POST /companies.
-2. Sistema crea:
-   - empresa
-   - membership con role = `owner`
-3. Sistema responde con:
+2. El sistema crea:
+   - la empresa
+   - una membership con role = `owner`.
+3. El sistema responde con:
    - empresa creada
-   - membership owner
+   - membership owner.
 
 ### Resultado esperado
-- El usuario queda como **owner** de esa empresa.
+- El usuario queda como **owner** de la empresa.
 - La empresa queda `active`.
-- El usuario puede operar usando `X-Company-Id` de esa empresa.
+- El usuario puede operar usando `X-Company-Id`.
 
 ---
 
 ## CU-03 – Listado de empresas propias
 
 ### Escenario
-Un usuario pertenece a varias empresas.
+Un usuario pertenece a una o más empresas.
 
 ### Flujo
 1. Usuario autenticado llama GET /companies.
-2. Sistema devuelve solo empresas donde:
+2. El sistema devuelve solo empresas donde:
    - tiene membership
    - status = `active`
+   - no están soft-deleted.
 
 ### Resultado esperado
 - No aparecen empresas ajenas.
-- No aparecen empresas soft-deleted.
+- No aparecen empresas eliminadas lógicamente.
 
 ---
 
 ## CU-04 – Invitación de miembro
 
 ### Escenario
-Owner o admin quiere sumar un colaborador.
+Un owner o admin quiere sumar un colaborador.
 
 ### Flujo
 1. Owner/Admin llama POST /companies/{id}/memberships.
 2. Envía email + role.
-3. Sistema crea membership en estado `invited`.
+3. El sistema crea una membership con:
+   - status = `invited`
+   - invited_email = email enviado.
 
 ### Resultado esperado
-- Membership creada con status `invited`.
-- No requiere que el usuario exista todavía.
+- Membership creada sin requerir que el usuario exista aún.
+- No se duplica membership para el mismo email/company.
 
 ---
 
-## CU-05 – Aceptación de invitación
+## CU-05 – Aceptación automática de invitación
 
 ### Escenario
-El usuario invitado acepta la invitación.
+Un usuario invitado accede al sistema.
 
 ### Flujo
-1. Usuario se registra o inicia sesión.
-2. El sistema vincula el usuario a la membership existente.
-3. Membership pasa a status `active`.
-
-### Disparador
-- La aceptación ocurre automáticamente al detectar login con email invitado.
-- No existe endpoint explícito de aceptación en FASE 1.
+1. El usuario inicia sesión con un email que coincide con una invitación pendiente.
+2. El sistema detecta automáticamente la membership en estado `invited`.
+3. La membership se vincula al usuario.
+4. El status de la membership pasa a `active`.
 
 ### Resultado esperado
-- Usuario queda vinculado a la empresa.
-- Puede operar según su role.
+- No existe endpoint manual de aceptación.
+- La aceptación es **automática y transparente**.
+- El historial registra el cambio.
 
 ---
 
 ## CU-06 – Cambio de rol
 
 ### Escenario
-Owner quiere promover un member a admin.
+Un owner quiere promover o degradar un miembro.
 
 ### Flujo
 1. Owner llama PATCH /memberships/{id}.
-2. Cambia role de `member` a `admin`.
+2. Cambia role de `member` a `admin` o viceversa.
+
+### Reglas
+- Admin **NO** puede asignar role `owner`.
+- Solo owner puede crear otro owner (si se permite en el futuro).
 
 ### Resultado esperado
-- Cambio permitido.
-- Se registra historial.
-- Admin NO puede promover a owner.
+- Cambio permitido solo si cumple reglas.
+- Se registra historial del cambio.
 
 ---
 
@@ -124,28 +135,28 @@ Owner quiere promover un member a admin.
 Se intenta eliminar o degradar al último owner.
 
 ### Flujo
-1. Admin intenta eliminar owner → falla.
+1. Admin intenta eliminar o degradar owner → falla.
 2. Owner intenta eliminarse a sí mismo siendo el único owner → falla.
 
 ### Resultado esperado
-- Siempre debe existir al menos **un owner activo** por empresa.
-- El sistema bloquea la operación con error claro.
+- Siempre debe existir **al menos un owner activo por empresa**.
+- El sistema bloquea la operación con error claro y explícito.
 
 ---
 
 ## CU-08 – Suspensión de miembro
 
 ### Escenario
-Admin suspende un miembro problemático.
+Admin u owner suspende un miembro.
 
 ### Flujo
-1. Admin llama PATCH /memberships/{id}.
+1. Admin/Owner llama PATCH /memberships/{id}.
 2. Cambia status a `suspended`.
 
 ### Resultado esperado
 - El miembro suspendido:
-  - no puede operar
   - no pasa RequireCompany
+  - no puede operar.
 - El historial refleja el cambio.
 
 ---
@@ -157,12 +168,12 @@ Owner decide cerrar una empresa.
 
 ### Flujo
 1. Owner llama DELETE /companies/{id}.
-2. Sistema hace soft-delete.
+2. El sistema hace soft-delete.
 
 ### Resultado esperado
-- Empresa queda `deleted_at != null`.
-- No se borra nada físicamente.
-- Memberships quedan asociadas pero inactivas.
+- La empresa queda con `deleted_at`.
+- No se elimina información física.
+- Memberships quedan inactivas.
 - Historial y audit_log se actualizan.
 
 ---
@@ -170,19 +181,22 @@ Owner decide cerrar una empresa.
 ## CU-10 – Auditoría mínima
 
 ### Escenario
-Se realizan acciones sensibles.
+Se ejecutan acciones sensibles.
 
 ### Acciones auditables mínimas
-- login exitoso
-- login fallido
-- create company
-- invite membership
-- change role
-- suspend membership
-- delete company
-### Acciones no auditables
-- Lecturas (GET) no generan audit_log salvo contexto de seguridad.
-- No se auditan consultas de listados generales sin contexto sensible.
+- auth.login (exitoso)
+- auth.login_failed
+- company.create
+- company.update
+- company.delete (soft)
+- membership.invite
+- membership.activate
+- membership.role_change
+- membership.suspend
+
+### Exclusiones
+- Operaciones de lectura (GET) **NO generan audit_log**,
+  excepto en contextos de seguridad o detección de abuso.
 
 ### Resultado esperado
 - audit_log contiene entradas claras.
@@ -196,9 +210,7 @@ Se realizan acciones sensibles.
 FASE 1 está **APROBADA** si:
 
 - Todos los casos CU-01 a CU-10 funcionan.
-- No hay acciones posibles fuera del rol.
+- No existen flujos ambiguos.
 - No se pierde historial.
-- No se rompe multi-empresa.
-- No hay acciones ambiguas.
-
-Si un caso no está cubierto → **no se continúa a FASE 2**.
+- No se rompe multiempresa.
+- No se puede dejar una empresa sin owner.
