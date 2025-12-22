@@ -15,6 +15,7 @@ Un usuario nuevo quiere usar el sistema por primera vez.
 ### Flujo
 1. Usuario se registra (email + password).
    - El registro puede ser explícito (endpoint) o implícito al aceptar invitación.
+   - No se asume un endpoint de registro si el flujo es por invitación.
 2. Usuario inicia sesión.
 3. El sistema devuelve:
    - token válido
@@ -93,6 +94,7 @@ El usuario invitado acepta la invitación.
 
 ### Disparador
 - La aceptación ocurre automáticamente al detectar login con email invitado.
+- No existe endpoint explícito de aceptación en FASE 1.
 
 ### Resultado esperado
 - Usuario queda vinculado a la empresa.
@@ -180,6 +182,7 @@ Se realizan acciones sensibles.
 - delete company
 ### Acciones no auditables
 - Lecturas (GET) no generan audit_log salvo contexto de seguridad.
+- No se auditan consultas de listados generales sin contexto sensible.
 
 ### Resultado esperado
 - audit_log contiene entradas claras.
