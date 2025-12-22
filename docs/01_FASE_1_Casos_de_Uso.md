@@ -14,6 +14,7 @@ Un usuario nuevo quiere usar el sistema por primera vez.
 
 ### Flujo
 1. Usuario se registra (email + password).
+   - El registro puede ser explícito (endpoint) o implícito al aceptar invitación.
 2. Usuario inicia sesión.
 3. El sistema devuelve:
    - token válido
@@ -89,6 +90,9 @@ El usuario invitado acepta la invitación.
 1. Usuario se registra o inicia sesión.
 2. El sistema vincula el usuario a la membership existente.
 3. Membership pasa a status `active`.
+
+### Disparador
+- La aceptación ocurre automáticamente al detectar login con email invitado.
 
 ### Resultado esperado
 - Usuario queda vinculado a la empresa.
@@ -174,6 +178,8 @@ Se realizan acciones sensibles.
 - change role
 - suspend membership
 - delete company
+### Acciones no auditables
+- Lecturas (GET) no generan audit_log salvo contexto de seguridad.
 
 ### Resultado esperado
 - audit_log contiene entradas claras.
