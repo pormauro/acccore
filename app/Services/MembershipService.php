@@ -75,6 +75,8 @@ class MembershipService
                 'accepted_at' => null,
                 'created_at' => $now,
                 'created_by' => $actor->id,
+                'updated_at' => $now,
+                'updated_by' => $actor->id,
             ]);
 
             $this->auditLogService->record(
@@ -92,6 +94,82 @@ class MembershipService
         });
 
         return $membership;
+    }
+
+    public function findMembership(Company $company, string $membershipId): CompanyMembership
+    {
+        $membership = CompanyMembership::query()
+            ->where('company_id', $company->id)
+            ->where('id', $membershipId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$membership) {
+            throw new HttpException(404, 'NOT_FOUND');
+        }
+
+        return $membership;
+    }
+
+    public function update(User $actor, Company $company, CompanyMembership $membership, array $data): CompanyMembership
+    {
+        DB::transaction(function () use ($actor, $company, $membership, $data): void {
+            if (
+                array_key_exists('role', $data)
+                && $membership->role === 'owner'
+                && $data['role'] !== 'owner'
+            ) {
+                $this->ensureCompanyHasAnotherOwner($company->id, $membership->id);
+            }
+
+            if (
+                array_key_exists('status', $data)
+                && $membership->role === 'owner'
+                && $data['status'] === 'suspended'
+            ) {
+                $this->ensureCompanyHasAnotherOwner($company->id, $membership->id);
+            }
+
+            $updates = [];
+
+            if (array_key_exists('role', $data)) {
+                $updates['role'] = $data['role'];
+            }
+
+            if (array_key_exists('status', $data)) {
+                $updates['status'] = $data['status'];
+            }
+
+            if ($updates === []) {
+                return;
+            }
+
+            $now = now();
+            $updates['updated_at'] = $now;
+            $updates['updated_by'] = $actor->id;
+
+            $membership->update($updates);
+        });
+
+        return $membership->fresh();
+    }
+
+    public function remove(User $actor, Company $company, CompanyMembership $membership): void
+    {
+        DB::transaction(function () use ($actor, $company, $membership): void {
+            if ($membership->role === 'owner') {
+                $this->ensureCompanyHasAnotherOwner($company->id, $membership->id);
+            }
+
+            $now = now();
+
+            $membership->update([
+                'deleted_at' => $now,
+                'deleted_by' => $actor->id,
+                'updated_at' => $now,
+                'updated_by' => $actor->id,
+            ]);
+        });
     }
 
     /**
@@ -167,6 +245,8 @@ class MembershipService
                 'status' => 'active',
                 'created_at' => $now,
                 'created_by' => null,
+                'updated_at' => $now,
+                'updated_by' => null,
             ]);
 
             $invitedMembership->update([
@@ -191,5 +271,21 @@ class MembershipService
         });
 
         return $user;
+    }
+
+    private function ensureCompanyHasAnotherOwner(string $companyId, string $excludeMembershipId): void
+    {
+        $owners = \App\Models\CompanyMembership::where('company_id', $companyId)
+            ->where('role', 'owner')
+            ->where('status', 'active')
+            ->where('id', '!=', $excludeMembershipId)
+            ->count();
+
+        if ($owners === 0) {
+            throw new \Symfony\Component\HttpKernel\Exception\HttpException(
+                409,
+                'COMPANY_MUST_HAVE_OWNER'
+            );
+        }
     }
 }
