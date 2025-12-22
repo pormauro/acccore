@@ -1,0 +1,28 @@
+Leé y respetá estrictamente:
+- /CODEX_INSTRUCTIONS.md
+- /docs/01_FASE_1_Identity_Companies.md
+- /database/ddl/001_phase1_identity_companies.sql
+Implementá FASE 1 en Laravel 10 con Sanctum.
+Reglas:
+- NO inventes entidades.
+- NO cambies el DDL.
+- Todas las FK deben existir.
+- Todas las tablas history deben llenarse (si no usás triggers, entonces escribí en history desde Services).
+- Controllers mínimos, lógica en Services.
+- Policies obligatorias (CompaniesPolicy, MembershipPolicy).
+- Middleware RequireCompany obligatorio: exige X-Company-Id y membership active.
+Endpoints obligatorios:
+Auth:
+- POST /api/v1/auth/login
+- POST /api/v1/auth/logout
+- GET  /api/v1/auth/me
+Companies:
+- GET/POST/PATCH/DELETE /api/v1/companies
+- GET /api/v1/companies/{companyId}
+Memberships:
+- GET/POST/PATCH/DELETE /api/v1/companies/{companyId}/memberships...
+Por cada endpoint:
+- actualizar docs en /docs/api
+- actualizar Postman en /postman/acccore-base.postman_collection.json
+- incluir ejemplos request/response y errores
+Si algo no está explícito, NO lo implementes.
