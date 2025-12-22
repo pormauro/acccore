@@ -50,6 +50,8 @@ class CompanyService
                 'status' => 'active',
                 'created_at' => $now,
                 'created_by' => $user->id,
+                'updated_at' => $now,
+                'updated_by' => $user->id,
             ]);
 
             $membership = CompanyMembership::create([
@@ -60,6 +62,8 @@ class CompanyService
                 'status' => 'active',
                 'created_at' => $now,
                 'created_by' => $user->id,
+                'updated_at' => $now,
+                'updated_by' => $user->id,
                 'accepted_at' => $now,
             ]);
 

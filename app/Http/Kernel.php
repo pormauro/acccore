@@ -46,6 +46,15 @@ class Kernel extends HttpKernel
     ];
 
     /**
+     * The application's route middleware.
+     *
+     * @var array<string, class-string|string>
+     */
+    protected $routeMiddleware = [
+        'require.company' => \App\Http\Middleware\RequireCompany::class,
+    ];
+
+    /**
      * The application's middleware aliases.
      *
      * Aliases may be used to conveniently assign middleware to routes and groups.
