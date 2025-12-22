@@ -2,21 +2,16 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
+use App\Models\Traits\UsesUuid;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class CompanyMembership extends Model
 {
-    use HasFactory;
+    use SoftDeletes;
+    use UsesUuid;
 
     protected $table = 'company_memberships';
-
-    public $incrementing = false;
-
-    protected $keyType = 'string';
-
-    public $timestamps = false;
 
     protected $fillable = [
         'id',
@@ -27,21 +22,16 @@ class CompanyMembership extends Model
         'invited_email',
         'invited_at',
         'accepted_at',
-        'created_at',
         'created_by',
-        'updated_at',
         'updated_by',
-        'deleted_at',
         'deleted_by',
     ];
 
-    public function company(): BelongsTo
-    {
-        return $this->belongsTo(Company::class, 'company_id');
-    }
-
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'user_id');
-    }
+    protected $casts = [
+        'invited_at' => 'datetime',
+        'accepted_at' => 'datetime',
+        'created_at' => 'datetime',
+        'updated_at' => 'datetime',
+        'deleted_at' => 'datetime',
+    ];
 }

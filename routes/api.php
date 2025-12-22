@@ -3,45 +3,25 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\MembershipController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
-*/
-
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
-});
-
-Route::get('/v1/health', function () {
-    return response()->json([
-        'status' => 'ok',
-        'app' => config('app.name'),
-        'time' => now()->toISOString(),
-    ]);
-});
-
 Route::prefix('v1')->group(function () {
-    Route::prefix('auth')->group(function () {
-        Route::post('login', [AuthController::class, 'login']);
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::post('logout', [AuthController::class, 'logout']);
-            Route::get('me', [AuthController::class, 'me']);
-        });
-    });
+    // FASE 0
+    Route::get('health', fn () => response()->json(['status' => 'ok'], 200));
+
+    // Auth (NO hay register público)
+    Route::post('auth/login', [AuthController::class, 'login']);
+    Route::post('auth/refresh', [AuthController::class, 'refresh']);
 
     Route::middleware('auth:sanctum')->group(function () {
+        Route::post('auth/logout', [AuthController::class, 'logout']);
+        Route::get('auth/me', [AuthController::class, 'me']);
+
+        // Companies (list/create sin require.company todavía, porque todavía no elegiste una company)
         Route::get('companies', [CompanyController::class, 'index']);
         Route::post('companies', [CompanyController::class, 'store']);
 
+        // Todo lo que sea “dentro de una company” requiere X-Company-Id
         Route::middleware('require.company')->group(function () {
             Route::get('companies/{companyId}', [CompanyController::class, 'show']);
             Route::patch('companies/{companyId}', [CompanyController::class, 'update']);
