@@ -16,15 +16,27 @@ class CompanyController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'UNAUTHENTICATED');
+        }
+
         $this->authorize('viewAny', Company::class);
 
-        $payload = $this->companyService->listForUser($request->user());
+        $payload = $this->companyService->listForUser($user);
 
         return response()->json($payload, 200);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'UNAUTHENTICATED');
+        }
+
         $this->authorize('create', Company::class);
 
         $data = $request->validate([
@@ -33,14 +45,20 @@ class CompanyController extends Controller
             'tax_id' => ['nullable', 'string', 'max:50'],
         ]);
 
-        $payload = $this->companyService->create($request->user(), $data);
+        $payload = $this->companyService->create($user, $data);
 
         return response()->json($payload, 201);
     }
 
     public function show(Request $request, string $companyId): JsonResponse
     {
-        $company = $this->companyService->get($request->user(), $companyId);
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'UNAUTHENTICATED');
+        }
+
+        $company = $this->companyService->get($user, $companyId);
         $this->authorize('view', $company);
 
         return response()->json(['company' => $company], 200);
@@ -48,7 +66,13 @@ class CompanyController extends Controller
 
     public function update(Request $request, string $companyId): JsonResponse
     {
-        $company = $this->companyService->get($request->user(), $companyId);
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'UNAUTHENTICATED');
+        }
+
+        $company = $this->companyService->get($user, $companyId);
         $this->authorize('update', $company);
 
         $data = $request->validate([
@@ -58,17 +82,23 @@ class CompanyController extends Controller
             'status' => ['sometimes', 'in:active,suspended'],
         ]);
 
-        $company = $this->companyService->update($request->user(), $company, $data);
+        $company = $this->companyService->update($user, $company, $data);
 
         return response()->json(['company' => $company], 200);
     }
 
     public function destroy(Request $request, string $companyId): JsonResponse
     {
-        $company = $this->companyService->get($request->user(), $companyId);
+        $user = $request->user();
+
+        if (!$user) {
+            abort(401, 'UNAUTHENTICATED');
+        }
+
+        $company = $this->companyService->get($user, $companyId);
         $this->authorize('delete', $company);
 
-        $this->companyService->softDelete($request->user(), $company);
+        $this->companyService->softDelete($user, $company);
 
         return response()->json(['status' => 'ok'], 200);
     }
