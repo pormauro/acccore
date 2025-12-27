@@ -20,6 +20,10 @@ class AuditLogService
         array $metadata = [],
         ?Request $request = null
     ): void {
+        if ($actorUserId === null) {
+            return;
+        }
+
         $request = $request ?? request();
 
         AuditLog::create([

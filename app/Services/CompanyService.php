@@ -15,8 +15,19 @@ class CompanyService
     {
     }
 
-    public function listForUser(User $user): array
+    private function requireUser(?User $user): User
     {
+        if (!$user || !$user->id) {
+            throw new HttpException(401, 'UNAUTHENTICATED');
+        }
+
+        return $user;
+    }
+
+    public function listForUser(?User $user): array
+    {
+        $user = $this->requireUser($user);
+
         $items = Company::query()
             ->join('company_memberships', 'companies.id', '=', 'company_memberships.company_id')
             ->where('company_memberships.user_id', $user->id)
@@ -34,8 +45,9 @@ class CompanyService
         return ['items' => $items];
     }
 
-    public function create(User $user, array $data): array
+    public function create(?User $user, array $data): array
     {
+        $user = $this->requireUser($user);
         $company = null;
         $membership = null;
 
@@ -83,8 +95,10 @@ class CompanyService
         ];
     }
 
-    public function get(User $user, string $companyId): Company
+    public function get(?User $user, string $companyId): Company
     {
+        $user = $this->requireUser($user);
+
         $company = Company::query()
             ->where('id', $companyId)
             ->whereNull('deleted_at')
@@ -97,8 +111,10 @@ class CompanyService
         return $company;
     }
 
-    public function update(User $user, Company $company, array $data): Company
+    public function update(?User $user, Company $company, array $data): Company
     {
+        $user = $this->requireUser($user);
+
         DB::transaction(function () use ($user, $company, $data): void {
             $company->fill($data);
             $company->updated_at = now();
@@ -118,8 +134,10 @@ class CompanyService
         return $company->fresh();
     }
 
-    public function softDelete(User $user, Company $company): void
+    public function softDelete(?User $user, Company $company): void
     {
+        $user = $this->requireUser($user);
+
         DB::transaction(function () use ($user, $company): void {
             $now = now();
 
