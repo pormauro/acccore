@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\CompanyMembership;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -46,6 +47,15 @@ class AuthService
 
             $user = Auth::user() ?? $user;
 
+            if ($user->status === 'suspended') {
+                $this->auditLogService->record('auth.login_failed', $user->id, null, 'user', $user->id, 'security', [
+                    'email' => $email,
+                    'status' => $user->status,
+                ], $request);
+
+                throw new HttpException(403, 'USER_SUSPENDED');
+            }
+
             // Si existe invitación pendiente para este email, la acepta vía MembershipService (no acá)
             $this->membershipService->acceptPendingInvitationsForEmail($user, $email);
 
@@ -63,7 +73,9 @@ class AuthService
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
+                    'status' => $user->status,
                 ],
+                'memberships' => $this->getUserMemberships($user->id),
             ];
         }
 
@@ -77,7 +89,9 @@ class AuthService
                 'id' => $created->id,
                 'name' => $created->name,
                 'email' => $created->email,
+                'status' => $created->status,
             ],
+            'memberships' => $this->getUserMemberships($created->id),
         ];
     }
 
@@ -106,9 +120,24 @@ class AuthService
         return [
             'user' => [
                 'id' => $user->id,
-                'name' => $user->name,
                 'email' => $user->email,
+                'status' => $user->status,
             ],
+            'memberships' => $this->getUserMemberships($user->id),
         ];
+    }
+
+    private function getUserMemberships(string $userId): array
+    {
+        return CompanyMembership::query()
+            ->where('user_id', $userId)
+            ->whereNull('deleted_at')
+            ->orderBy('created_at')
+            ->get([
+                'company_id',
+                'role',
+                'status',
+            ])
+            ->toArray();
     }
 }
