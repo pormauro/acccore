@@ -4,7 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AuthService
@@ -17,12 +17,13 @@ class AuthService
 
     public function login(Request $request): array
     {
-        $email = trim((string) $request->input('email'));
-        $password = (string) $request->input('password');
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
 
-        if ($email === '' || $password === '') {
-            throw new HttpException(422, 'VALIDATION_ERROR');
-        }
+        $email = trim($credentials['email']);
+        $password = $credentials['password'];
 
         // 1) Intento login normal
         $user = User::query()
@@ -31,13 +32,19 @@ class AuthService
             ->first();
 
         if ($user) {
-            if (!Hash::check($password, $user->password)) {
+            if (!Auth::attempt([
+                'email' => $email,
+                'password' => $password,
+                'deleted_at' => null,
+            ])) {
                 $this->auditLogService->record('auth.login_failed', $user->id, null, 'user', $user->id, 'security', [
                     'email' => $email,
                 ], $request);
 
                 throw new HttpException(401, 'INVALID_CREDENTIALS');
             }
+
+            $user = Auth::user() ?? $user;
 
             // Si existe invitación pendiente para este email, la acepta vía MembershipService (no acá)
             $this->membershipService->acceptPendingInvitationsForEmail($user, $email);
